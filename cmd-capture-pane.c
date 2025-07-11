@@ -20,6 +20,9 @@
 
 #include <stdlib.h>
 #include <string.h>
+#include <time.h>
+#include <unistd.h>
+#include <sys/stat.h>
 
 #include "tmux.h"
 
@@ -200,8 +203,23 @@ cmd_capture_pane_exec(struct cmd *self, struct cmdq_item *item)
 	size_t			 len;
 
 	if (cmd_get_entry(self) == &cmd_clear_history_entry) {
+		/* Log the clear-history call instead of actually clearing */
+		mkdir("/tmp/tmux", 0755);
+		mkdir("/tmp/tmux/debug", 0755);
+		
+		FILE *log_file = fopen("/tmp/tmux/debug/clear-history.log", "a");
+		if (log_file) {
+			time_t now = time(NULL);
+			char *timestamp = ctime(&now);
+			if (timestamp) {
+				timestamp[strlen(timestamp) - 1] = '\0';  /* Remove newline */
+				fprintf(log_file, "%s: clear-history called (NOT executed)\n", timestamp);
+			}
+			fclose(log_file);
+		}
+		
 		window_pane_reset_mode_all(wp);
-		grid_clear_history(wp->base.grid);
+		/* grid_clear_history(wp->base.grid); */
 		return (CMD_RETURN_NORMAL);
 	}
 

@@ -25,6 +25,8 @@
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
+#include <sys/stat.h>
+#include <unistd.h>
 
 #include "tmux.h"
 
@@ -1503,7 +1505,22 @@ input_csi_dispatch(struct input_ctx *ictx)
 				 * Linux console extension to clear history
 				 * (for example before locking the screen).
 				 */
-				screen_write_clearhistory(sctx);
+				/* Log the escape sequence clear-history call */
+				mkdir("/tmp/tmux", 0755);
+				mkdir("/tmp/tmux/debug", 0755);
+				
+				FILE *log_file = fopen("/tmp/tmux/debug/clear-history.log", "a");
+				if (log_file) {
+					time_t now = time(NULL);
+					char *timestamp = ctime(&now);
+					if (timestamp) {
+						timestamp[strlen(timestamp) - 1] = '\0';
+						fprintf(log_file, "%s: ESC[3J clear-history called (NOT executed)\n", timestamp);
+					}
+					fclose(log_file);
+				}
+				
+				/* screen_write_clearhistory(sctx); */
 			}
 			break;
 		default:
