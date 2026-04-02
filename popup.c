@@ -23,8 +23,37 @@
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+#include <stdio.h>
+#include <time.h>
+#include <stdarg.h>
 
 #include "tmux.h"
+
+/* Logging helper for debugging */
+static void
+popup_log(const char *fmt, ...)
+{
+	FILE *f;
+	va_list ap;
+	time_t t;
+	struct tm *tm;
+	char buf[256];
+
+	f = fopen("/tmp/tmux_popup.log", "a");
+	if (f == NULL)
+		return;
+
+	time(&t);
+	tm = localtime(&t);
+	strftime(buf, sizeof buf, "%Y-%m-%d %H:%M:%S", tm);
+	fprintf(f, "[%s] ", buf);
+
+	va_start(ap, fmt);
+	vfprintf(f, fmt, ap);
+	va_end(ap);
+	fprintf(f, "\n");
+	fclose(f);
+}
 
 struct popup_data {
 	struct client		 *c;
@@ -304,13 +333,23 @@ popup_job_complete_cb(struct job *job)
 	int			 status;
 
 	status = job_get_status(pd->job);
-	if (WIFEXITED(status))
+	popup_log("Job complete: raw_status=%d", status);
+
+	if (WIFEXITED(status)) {
 		pd->status = WEXITSTATUS(status);
-	else if (WIFSIGNALED(status))
+		popup_log("Job exited normally with code: %d", pd->status);
+	}
+	else if (WIFSIGNALED(status)) {
 		pd->status = WTERMSIG(status);
-	else
+		popup_log("Job killed by signal: %d (SIGHUP=1)", pd->status);
+	}
+	else {
 		pd->status = 0;
+		popup_log("Job status unknown, setting to 0");
+	}
 	pd->job = NULL;
+
+	popup_log("Final popup status: %d", pd->status);
 
 	if ((pd->flags & POPUP_CLOSEEXIT) ||
 	    ((pd->flags & POPUP_CLOSEEXITZERO) && pd->status == 0))
@@ -323,6 +362,8 @@ popup_display(int flags, struct cmdq_item *item, u_int px, u_int py, u_int sx,
     struct client *c, struct session *s, popup_close_cb cb, void *arg)
 {
 	struct popup_data	*pd;
+
+	popup_log("popup_display called: shellcmd=%s flags=%d", shellcmd, flags);
 
 	if (sx < 3 || sy < 3)
 		return (-1);
@@ -339,6 +380,7 @@ popup_display(int flags, struct cmdq_item *item, u_int px, u_int py, u_int sx,
 	pd->cb = cb;
 	pd->arg = arg;
 	pd->status = 128 + SIGHUP;
+	popup_log("Initial popup status set to: %d (128 + SIGHUP)", pd->status);
 
 	screen_init(&pd->s, sx - 2, sy - 2, 0);
 
